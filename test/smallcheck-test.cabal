@@ -1,0 +1,23 @@
+Name:          smallcheck-tests
+Version:       0.7
+Cabal-Version: >= 1.8
+License:       BSD3
+License-File:  LICENSE
+Author:        Colin Runciman
+Maintainer:    Roman Cheplyaka <roma@ro-che.info>
+Homepage:      https://github.com/feuerbach/smallcheck
+Bug-reports:   https://github.com/feuerbach/smallcheck/issues
+
+Stability:     Beta
+Category:      Testing
+Synopsis:      A property-based testing library
+Description:   SmallCheck is a testing library that allows to verify properties
+               for all test cases up to some depth. The test cases are generated
+               automatically by SmallCheck.
+Build-Type:    Simple
+
+
+Test-Suite test
+    type:       exitcode-stdio-1.0
+    main-is:    test.hs
+    Build-Depends: base == 4.*, test-framework, test-framework-smallcheck, smallcheck
