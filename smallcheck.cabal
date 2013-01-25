@@ -1,6 +1,6 @@
 Name:          smallcheck
 Version:       0.7
-Cabal-Version: >= 1.6
+Cabal-Version: >= 1.8
 License:       BSD3
 License-File:  LICENSE
 Author:        Colin Runciman
@@ -56,3 +56,9 @@ Library
     if impl(ghc >= 7.2.1)
       cpp-options: -DGENERICS
       build-depends: ghc-prim >= 0.2, dlist >= 0.2 && < 0.6
+
+Test-Suite test
+    type:       exitcode-stdio-1.0
+    hs-source-dirs:    test
+    main-is:    test.hs
+    Build-Depends: base == 4.*, test-framework, test-framework-smallcheck, smallcheck
