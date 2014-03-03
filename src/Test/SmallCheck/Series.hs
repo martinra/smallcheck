@@ -163,7 +163,7 @@ module Test.SmallCheck.Series (
   alts0, alts1, alts2, alts3, alts4, newtypeAlts,
 
   -- * Basic definitions
-  Depth, Series, Serial(..), CoSerial(..), (:->)(..),
+  Depth, Series, Serial(..), CoSerial(..), (:->)(..), fun,
 
   -- * Convenient wrappers
   Positive(..), NonNegative(..), NonEmpty(..),
@@ -221,6 +221,13 @@ data a :-> b = Fun
   , functionDepth :: Depth
   , functionDefault :: Maybe b
   }
+
+fun :: (a :-> b) -> (a -> b)
+fun f x =
+  fromMaybe err $
+    function f x <|> functionDefault f
+  where
+    err = error "No default value for a partial function"
 
 -- }}}
 
