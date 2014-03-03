@@ -83,9 +83,9 @@ module Test.SmallCheck.Series (
   --
   -- >consN f = decDepth $
   -- >  f <$> series
-  -- >    <~> series
-  -- >    <~> series
-  -- >    <~> ...    {- series repeated N times in total -}
+  -- >    <*> series
+  -- >    <*> series
+  -- >    <*> ...    {- series repeated N times in total -}
 
   -- ** What does consN do, exactly?
 
@@ -119,8 +119,8 @@ module Test.SmallCheck.Series (
   --
   -- >instance CoSerial m a => CoSerial m (Tree a) where
   -- >  coseries rs =
-  -- >    alts0 rs >>- \z ->
-  -- >    alts3 rs >>- \f ->
+  -- >    alts0 rs >>= \z ->
+  -- >    alts3 rs >>= \f ->
   -- >    return $ \t ->
   -- >      case t of
   -- >        Null -> z
@@ -128,7 +128,7 @@ module Test.SmallCheck.Series (
   --
   -- >instance CoSerial m a => CoSerial m (Light a) where
   -- >  coseries rs =
-  -- >    newtypeAlts rs >>- \f ->
+  -- >    newtypeAlts rs >>= \f ->
   -- >    return $ \l ->
   -- >      case l of
   -- >        Light x -> f x
@@ -169,7 +169,7 @@ module Test.SmallCheck.Series (
   Positive(..), NonNegative(..), NonEmpty(..),
 
   -- * Other useful definitions
-  (\/), (><), (<~>), (>>-),
+  (\/), (><),
   localDepth,
   decDepth,
   getDepth,
@@ -258,17 +258,17 @@ listM d s = observeAllT $ runSeries d s
 -- | Sum (union) of series
 infixr 7 \/
 (\/) :: Monad m => Series m a -> Series m a -> Series m a
-(\/) = interleave
+(\/) = mplus
 
 -- | Product of series
 infixr 8 ><
 (><) :: Monad m => Series m a -> Series m b -> Series m (a,b)
-a >< b = (,) <$> a <~> b
+a >< b = (,) <$> a <*> b
 
 -- | Fair version of 'ap' and '<*>'
 infixl 4 <~>
 (<~>) :: Monad m => Series m (a -> b) -> Series m a -> Series m b
-a <~> b = a >>- (<$> b)
+(<~>) = (<*>)
 
 uncurry3 :: (a->b->c->d) -> ((a,b,c)->d)
 uncurry3 f (x,y,z) = f x y z
@@ -334,22 +334,22 @@ newtypeCons :: Serial m a => (a->b) -> Series m b
 newtypeCons f = f <$> series
 
 cons2 :: (Serial m a, Serial m b) => (a->b->c) -> Series m c
-cons2 f = decDepth $ f <$> series <~> series
+cons2 f = decDepth $ f <$> series <*> series
 
 cons3 :: (Serial m a, Serial m b, Serial m c) =>
          (a->b->c->d) -> Series m d
 cons3 f = decDepth $
   f <$> series
-    <~> series
-    <~> series
+    <*> series
+    <*> series
 
 cons4 :: (Serial m a, Serial m b, Serial m c, Serial m d) =>
          (a->b->c->d->e) -> Series m e
 cons4 f = decDepth $
   f <$> series
-    <~> series
-    <~> series
-    <~> series
+    <*> series
+    <*> series
+    <*> series
 
 joinMb :: (a -> Maybe (b -> Maybe c)) -> (a -> b -> Maybe c)
 joinMb f a = fromMaybe (const Nothing) (f a)
@@ -428,7 +428,7 @@ instance Monad m => GCoSerial m U1 where
   {-# INLINE gCoseries #-}
 
 instance (Monad m, GSerial m a, GSerial m b) => GSerial m (a :*: b) where
-  gSeries = (:*:) <$> gSeries <~> gSeries
+  gSeries = (:*:) <$> gSeries <*> gSeries
   {-# INLINE gSeries #-}
 instance (Monad m, GCoSerial m a, GCoSerial m b) => GCoSerial m (a :*: b) where
   gCoseries rs = uncur <$> gCoseries (gCoseries rs)
@@ -441,8 +441,8 @@ instance (Monad m, GSerial m a, GSerial m b) => GSerial m (a :+: b) where
   {-# INLINE gSeries #-}
 instance (Monad m, GCoSerial m a, GCoSerial m b) => GCoSerial m (a :+: b) where
   gCoseries rs =
-    gCoseries rs >>- \f ->
-    gCoseries rs >>- \g ->
+    gCoseries rs >>= \f ->
+    gCoseries rs >>= \g ->
     return $
     \e -> case e of
       L1 x -> f x
@@ -473,9 +473,9 @@ instance Monad m => Serial m Int where
 -- TODO check this
 instance Monad m => CoSerial m Int where
   coseriesP rs =
-    alts0 rs >>- \z ->
-    alts1 rs >>- \f ->
-    alts1 rs >>- \g ->
+    alts0 rs >>= \z ->
+    alts1 rs >>= \f ->
+    alts1 rs >>= \g ->
     return $ \i -> case () of { _
       | i > 0 -> f (N (i - 1))
       | i < 0 -> g (N (abs i - 1))
@@ -504,7 +504,7 @@ instance (Integral a, Monad m) => CoSerial m (N a) where
     --
     -- The recursion stops when depth == 0. Then alts1 produces a constant
     -- function, and doesn't call back to 'coseries'.
-    alts1 rs >>- \f ->
+    alts1 rs >>= \f ->
     return $
       \(N i) -> do
         guard $ i > 0
@@ -512,7 +512,7 @@ instance (Integral a, Monad m) => CoSerial m (N a) where
 
 instance Monad m => Serial m Float where
   series =
-    series >>- \(sig, exp) ->
+    series >>= \(sig, exp) ->
     guard (odd sig || sig==0 && exp==0) >>
     return (encodeFloat sig exp)
 instance Monad m => CoSerial m Float where
@@ -538,7 +538,7 @@ instance Monad m => Serial m Char where
   series = generate $ \d -> take (d+1) ['a'..'z']
 instance Monad m => CoSerial m Char where
   coseriesP rs =
-    alts1 rs >>- \f ->
+    alts1 rs >>= \f ->
     return $ \c -> f (N (fromEnum c - fromEnum 'a'))
 
 instance (Serial m a, Serial m b) => Serial m (a,b) where
@@ -560,28 +560,28 @@ instance Monad m => Serial m Bool where
   series = cons0 True \/ cons0 False
 instance Monad m => CoSerial m Bool where
   coseriesP rs =
-    alts0 rs >>- \r1 ->
-    alts0 rs >>- \r2 ->
+    alts0 rs >>= \r1 ->
+    alts0 rs >>= \r2 ->
     return $ \x -> if x then r1 else r2
 
 instance (Serial m a) => Serial m (Maybe a) where
   series = cons0 Nothing \/ cons1 Just
 instance (CoSerial m a) => CoSerial m (Maybe a) where
   coseriesP rs =
-    maybe <$> alts0 rs <~> alts1 rs
+    maybe <$> alts0 rs <*> alts1 rs
 
 instance (Serial m a, Serial m b) => Serial m (Either a b) where
   series = cons1 Left \/ cons1 Right
 instance (CoSerial m a, CoSerial m b) => CoSerial m (Either a b) where
   coseriesP rs =
-    either <$> alts1 rs <~> alts1 rs
+    either <$> alts1 rs <*> alts1 rs
 
 instance Serial m a => Serial m [a] where
   series = cons0 [] \/ cons2 (:)
 instance CoSerial m a => CoSerial m [a] where
   coseriesP rs =
-    alts0 rs >>- \y ->
-    alts2 rs >>- \f ->
+    alts0 rs >>= \y ->
+    alts2 rs >>= \f ->
     return $ \xs -> case xs of [] -> y; x:xs' -> f x xs'
 
 
