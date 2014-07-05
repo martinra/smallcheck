@@ -28,4 +28,4 @@ executable smallcheck-test
     tasty-hunit >= 0.4.1,
     tasty-smallcheck
   default-language:    Haskell2010
-  ghc-options:         -fhpc
+  -- ghc-options:         -fhpc

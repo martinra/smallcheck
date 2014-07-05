@@ -24,7 +24,7 @@
 --------------------------------------------------------------------
 
 {-# LANGUAGE CPP, RankNTypes, MultiParamTypeClasses, FlexibleInstances,
-             GeneralizedNewtypeDeriving, FlexibleContexts #-}
+             GeneralizedNewtypeDeriving, FlexibleContexts, Arrows #-}
 -- The following is needed for generic instances
 {-# LANGUAGE DefaultSignatures, FlexibleContexts, TypeOperators,
              TypeSynonymInstances, FlexibleInstances, OverlappingInstances #-}
@@ -182,13 +182,18 @@ module Test.SmallCheck.Series (
   -- }}}
   ) where
 
-import Control.Monad.Logic
+import Prelude hiding ((.), id)
+import Control.Monad.Logic as L
 import Control.Monad.Reader
 import Control.Applicative
+import Control.Category
+import Control.Arrow
 import Control.Monad.Identity
 import Data.List
 import Data.Ratio
 import Data.Maybe
+import Data.Traversable (sequenceA)
+import Data.List
 import Test.SmallCheck.Series.Types
 import GHC.Generics
 
@@ -212,6 +217,8 @@ class Monad m => CoSerial m a where
     undefined
 
   coseriesP :: Series m b -> Series m (a -> Maybe b)
+  coseriesP = undefined
+  coseriesP2 :: CoSeries m () b -> CoSeries m a b
 
   -- default coseries :: (Generic a, GCoSerial m (Rep a)) => Series m b -> Series m (a:->b)
   -- coseries rs = (. from) <$> gCoseries rs
@@ -235,6 +242,12 @@ fun f x =
 -- Helper functions
 ------------------------------
 -- {{{
+
+-- | 'replicateM' for applicative functors
+replicateA :: Applicative f => Int -> f a -> f [a]
+replicateA n = sequenceA . replicate n
+
+indexMaybe l n = listToMaybe . genericDrop n $ l
 
 -- | A simple series specified by a function from depth to the list of
 -- values up to that depth.
@@ -460,8 +473,10 @@ instance (GSerial m f, Monad m) => GSerial m (C1 c f) where
 -- {{{
 instance Monad m => Serial m () where
   series = return ()
+
 instance Monad m => CoSerial m () where
   coseriesP rs = const <$> alts0 rs
+  coseriesP2 rs = rs
 
 instance Monad m => Serial m Int where
   series =
@@ -498,17 +513,10 @@ instance (Integral a, Serial m a) => Serial m (N a) where
   series = generate $ \d -> map (N . fromIntegral) [0..d]
 
 instance (Integral a, Monad m) => CoSerial m (N a) where
-  coseriesP rs =
-    -- This is a recursive function, because @alts1 rs@ typically calls
-    -- back to 'coseries' (but with lower depth).
-    --
-    -- The recursion stops when depth == 0. Then alts1 produces a constant
-    -- function, and doesn't call back to 'coseries'.
-    alts1 rs >>= \f ->
-    return $
-      \(N i) -> do
-        guard $ i > 0
-        f (N $ i-1)
+  coseriesP2 rs = partial $ withDepth $ \d ->
+    proc (N n) -> do
+      x <- replicateA d rs -< ()
+      returnA -<  x `indexMaybe` n
 
 instance Monad m => Serial m Float where
   series =
@@ -559,10 +567,10 @@ instance (CoSerial m a, CoSerial m b, CoSerial m c, CoSerial m d) => CoSerial m 
 instance Monad m => Serial m Bool where
   series = cons0 True \/ cons0 False
 instance Monad m => CoSerial m Bool where
-  coseriesP rs =
-    alts0 rs >>= \r1 ->
-    alts0 rs >>= \r2 ->
-    return $ \x -> if x then r1 else r2
+  coseriesP2 cs = proc b -> do
+    t <- cs -< ()
+    f <- cs -< ()
+    returnA -< if b then t else f
 
 instance (Serial m a) => Serial m (Maybe a) where
   series = cons0 Nothing \/ cons1 Just
@@ -586,14 +594,13 @@ instance CoSerial m a => CoSerial m [a] where
 
 
 instance (CoSerial m a, Serial m b) => Serial m (a:->b) where
-  series =
-    Fun
-      <$> coseriesP series
-      <*> getDepth
-      <*>
-        (if undefined -- is partial?
-          then Just <$> series
-          else pure Nothing)
+  series = do
+    cs <- fromCoSeries $ coseriesP2 $ toCoSeries series
+    case cs of
+      Left totalFs ->
+        Fun <$> ((Just .) <$> totalFs) <*> getDepth <*> pure Nothing
+      Right partFs ->
+        Fun <$> partFs <*> getDepth <*> (Just <$> series)
 
 -- Thanks to Ralf Hinze for the definition of coseries
 -- using the nest auxiliary.
@@ -686,3 +693,5 @@ instance Show a => Show (NonEmpty a) where
   showsPrec n (NonEmpty x) = showsPrec n x
 
 -- }}}
+
+-- just testing

@@ -13,6 +13,8 @@ import Data.Proxy
 import Data.List
 import qualified Data.Set as Set
 
+import Laws
+
 ------------------------------
 -- Auxiliary definitions
 ------------------------------
